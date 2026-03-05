@@ -105,4 +105,3 @@ class SpoolmanClient:
                     return resp.status == 200
         except:
             return False
-PYEOF
