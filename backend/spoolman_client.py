@@ -72,12 +72,23 @@ class SpoolmanClient:
         }
 
     async def find_spool_for_job(self, job):
-        metadata = job.get("metadata", {})
-        spool_id = metadata.get("spool_id")
+        spool_id = None
+        # Check auxiliary_data (Moonraker + Spoolman integration)
+        for aux in job.get("auxiliary_data", []):
+            if aux.get("provider") == "spoolman" and aux.get("name") == "spool_ids":
+                ids = aux.get("value", [])
+                if ids:
+                    spool_id = ids[0]
+                    break
+        # Fallback: metadata
+        if not spool_id:
+            metadata = job.get("metadata", {})
+            spool_id = metadata.get("spool_id")
         if spool_id:
             spool = await self.get_spool_by_id(spool_id)
             if spool:
                 return spool
+        # Last resort: active spool
         spools = await self.get_all_spools()
         for s in spools:
             if s.get("is_active", False):
@@ -94,3 +105,4 @@ class SpoolmanClient:
                     return resp.status == 200
         except:
             return False
+PYEOF
