@@ -96,6 +96,7 @@ class Database:
             return await cursor.fetchone() is not None
 
     async def insert_job(self, job_data):
+        """Neuen Job einfügen oder existierenden komplett ersetzen (inkl. Spule)."""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
                 INSERT OR REPLACE INTO print_jobs (
@@ -114,6 +115,50 @@ class Database:
                     :metadata_object_height, :metadata_estimated_time, CURRENT_TIMESTAMP
                 )""", job_data)
             await db.commit()
+
+    async def sync_job(self, job_data):
+        """Job beim Sync einfügen. Bei existierenden Jobs wird die manuelle Spulenzuordnung beibehalten."""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Prüfen ob Job bereits existiert
+            cursor = await db.execute(
+                "SELECT spool_id, spool_name, filament_type, filament_color, filament_cost_per_kg FROM print_jobs WHERE moonraker_job_id = ?",
+                (job_data["moonraker_job_id"],)
+            )
+            existing = await cursor.fetchone()
+            if existing:
+                # Job existiert bereits — nur Status/Daten aktualisieren, Spule beibehalten
+                await db.execute("""
+                    UPDATE print_jobs SET
+                        filename=:filename, status=:status,
+                        print_duration=:print_duration, total_duration=:total_duration,
+                        filament_used_mm=:filament_used_mm, filament_used_g=:filament_used_g,
+                        metadata_thumbnail=:metadata_thumbnail, metadata_slicer=:metadata_slicer,
+                        metadata_layer_height=:metadata_layer_height,
+                        metadata_object_height=:metadata_object_height,
+                        metadata_estimated_time=:metadata_estimated_time,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE moonraker_job_id=:moonraker_job_id
+                """, job_data)
+            else:
+                # Neuer Job — komplett einfügen
+                await db.execute("""
+                    INSERT INTO print_jobs (
+                        moonraker_job_id, filename, status, start_time, end_time,
+                        print_duration, total_duration, filament_used_mm, filament_used_g,
+                        spool_id, spool_name, filament_type, filament_color,
+                        filament_cost_per_kg, filament_cost, electricity_cost, total_cost,
+                        metadata_thumbnail, metadata_slicer, metadata_layer_height,
+                        metadata_object_height, metadata_estimated_time
+                    ) VALUES (
+                        :moonraker_job_id, :filename, :status, :start_time, :end_time,
+                        :print_duration, :total_duration, :filament_used_mm, :filament_used_g,
+                        :spool_id, :spool_name, :filament_type, :filament_color,
+                        :filament_cost_per_kg, :filament_cost, :electricity_cost, :total_cost,
+                        :metadata_thumbnail, :metadata_slicer, :metadata_layer_height,
+                        :metadata_object_height, :metadata_estimated_time
+                    )""", job_data)
+            await db.commit()
+            return existing is not None
 
     async def get_all_jobs(self, limit=100, offset=0, status_filter=None, sort_by="end_time", sort_order="desc"):
         async with aiosqlite.connect(self.db_path) as db:

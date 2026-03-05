@@ -73,9 +73,8 @@ async def sync_jobs():
             try:
                 job_data = await process_job(job)
                 if job_data:
-                    exists = await db.job_exists(job_data["moonraker_job_id"])
-                    await db.insert_job(job_data)
-                    if exists:
+                    existed = await db.sync_job(job_data)
+                    if existed:
                         updated += 1
                     else:
                         imported += 1
