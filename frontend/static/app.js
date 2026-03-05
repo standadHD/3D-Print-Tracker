@@ -374,6 +374,14 @@ async function saveSettings() {
 let _modalJobId = null;
 let _allSpools = [];
 
+// Modal direkt an body hängen (Firefox fixed-position Fix)
+(function() {
+    const modal = document.getElementById("spoolModal");
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+})();
+
 async function openSpoolModal(jobId, filename, currentSpoolId) {
     _modalJobId = jobId;
     document.getElementById("modalJobName").textContent = filename || `Job #${jobId}`;
