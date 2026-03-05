@@ -142,17 +142,23 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             # Prüfen ob Job bereits existiert
             cursor = await db.execute(
-                "SELECT spool_id, spool_name, filament_type, filament_color, filament_cost_per_kg FROM print_jobs WHERE moonraker_job_id = ?",
+                "SELECT spool_id, spool_name, filament_type, filament_color, filament_cost_per_kg, filament_used_g FROM print_jobs WHERE moonraker_job_id = ?",
                 (job_data["moonraker_job_id"],)
             )
             existing = await cursor.fetchone()
             if existing:
-                # Job existiert bereits — nur Status/Daten aktualisieren, Spule beibehalten
+                # Job existiert bereits — nur Status/Metadaten aktualisieren
+                # Spule, Filamentgewicht und Kosten beibehalten (koennen manuell gesetzt sein)
+                existing_filament_g = existing[5]  # filament_used_g aus SELECT
+                # Nur ueberschreiben wenn bisher 0 und jetzt ein Wert vorhanden
+                filament_g_to_use = job_data["filament_used_g"] \
+                    if (not existing_filament_g or existing_filament_g <= 0) \
+                    else existing_filament_g
                 await db.execute("""
                     UPDATE print_jobs SET
                         filename=:filename, status=:status,
                         print_duration=:print_duration, total_duration=:total_duration,
-                        filament_used_mm=:filament_used_mm, filament_used_g=:filament_used_g,
+                        filament_used_mm=:filament_used_mm,
                         metadata_thumbnail=:metadata_thumbnail, metadata_slicer=:metadata_slicer,
                         metadata_layer_height=:metadata_layer_height,
                         metadata_object_height=:metadata_object_height,
@@ -160,6 +166,12 @@ class Database:
                         updated_at=CURRENT_TIMESTAMP
                     WHERE moonraker_job_id=:moonraker_job_id
                 """, job_data)
+                # Filamentgewicht nur aktualisieren wenn es bisher 0 war
+                if filament_g_to_use != existing_filament_g:
+                    await db.execute(
+                        "UPDATE print_jobs SET filament_used_g=? WHERE moonraker_job_id=?",
+                        (filament_g_to_use, job_data["moonraker_job_id"]))
+                    logger.debug(f"Filament fuer {job_data['moonraker_job_id']} von {existing_filament_g}g auf {filament_g_to_use}g aktualisiert")
             else:
                 # Neuer Job — komplett einfügen
                 await db.execute("""
