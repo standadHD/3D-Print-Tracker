@@ -220,3 +220,15 @@ async def update_settings(settings: dict):
 async def recalculate():
     await recalculate_all_costs()
     return {"message": "Neu berechnet"}
+
+@app.get("/api/debug/printer-objects")
+async def debug_printer_objects():
+    """Alle verfuegbaren Klipper Printer-Objects abfragen (Diagnose fuer CFS/Filament-Hub)"""
+    return await moonraker.get_all_printer_objects()
+
+@app.get("/api/debug/job-sample")
+async def debug_job_sample():
+    """Letzten Job mit allen Feldern zurueckgeben (Diagnose fuer auxiliary_data / CFS-Slot)"""
+    result = await moonraker.get_job_history(limit=1)
+    jobs = result.get("jobs", [])
+    return jobs[0] if jobs else {"error": "Keine Jobs gefunden"}
