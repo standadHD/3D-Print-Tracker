@@ -284,6 +284,17 @@ async def update_cfs_slots(payload: dict):
     return {"message": "Slots gespeichert"}
 # ─────────────────────────────────────────────────────────────
 
+@app.get("/api/debug/spoolman")
+async def debug_spoolman():
+    locations = await spoolman.get_all_locations()
+    spools = await spoolman.get_all_spools()
+    return {
+        "locations": locations,
+        "locations_count": len(locations),
+        "spools_count": len(spools),
+        "spool_sample": spools[0] if spools else None
+    }
+
 @app.get("/api/debug/printer-objects")
 async def debug_printer_objects():
     """Alle verfuegbaren Klipper Printer-Objects abfragen (Diagnose fuer CFS/Filament-Hub)"""
