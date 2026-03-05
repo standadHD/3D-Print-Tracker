@@ -155,9 +155,14 @@ async def trigger_sync():
 @app.get("/api/jobs")
 async def get_jobs(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
                    status: str = Query("all"), sort_by: str = Query("end_time"),
-                   sort_order: str = Query("desc")):
-    jobs, total = await db.get_all_jobs(limit, offset, status, sort_by, sort_order)
+                   sort_order: str = Query("desc"),
+                   filament_type: str = Query("all")):
+    jobs, total = await db.get_all_jobs(limit, offset, status, sort_by, sort_order, filament_type)
     return {"jobs": jobs, "total": total, "limit": limit, "offset": offset}
+
+@app.get("/api/filament-types")
+async def get_filament_types():
+    return await db.get_distinct_filament_types()
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: int):

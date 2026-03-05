@@ -6,6 +6,7 @@ let sortOrder = "desc";
 document.addEventListener("DOMContentLoaded", () => {
     loadStatus();
     loadDashboard();
+    loadFilamentTypeFilter();
     loadJobs();
     setInterval(loadStatus, 15000);
 });
@@ -16,7 +17,7 @@ function switchTab(tab) {
     document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
     document.getElementById(`tab-${tab}`).classList.add("active");
     if (tab === "dashboard") loadDashboard();
-    if (tab === "jobs") loadJobs();
+    if (tab === "jobs") { loadJobs(); loadFilamentTypeFilter(); }
     if (tab === "spools") loadSpools();
     if (tab === "settings") { loadSettings(); loadCfsSlots(); }
 }
@@ -148,14 +149,26 @@ function toggleSortOrder() {
     loadJobs();
 }
 
+async function loadFilamentTypeFilter() {
+    try {
+        const types = await (await fetch(`${API}/filament-types`)).json();
+        const sel = document.getElementById("filamentTypeFilter");
+        const current = sel.value;
+        sel.innerHTML = '<option value="all">Alle Typen</option>' +
+            types.map(t => `<option value="${t}"${t === current ? ' selected' : ''}>${t}</option>`).join("");
+    } catch(e) { console.error("Filament types error:", e); }
+}
+
 async function loadJobs() {
     try {
         const status = document.getElementById("statusFilter").value;
+        const filamentType = document.getElementById("filamentTypeFilter").value;
         const sort = document.getElementById("sortBy").value;
         const offset = currentPage * pageSize;
 
         let url = `${API}/jobs?limit=${pageSize}&offset=${offset}&sort_by=${sort}&sort_order=${sortOrder}`;
         if (status !== "all") url += `&status=${status}`;
+        if (filamentType !== "all") url += `&filament_type=${encodeURIComponent(filamentType)}`;
 
         const r = await fetch(url);
         const d = await r.json();

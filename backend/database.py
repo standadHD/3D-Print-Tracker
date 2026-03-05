@@ -181,14 +181,18 @@ class Database:
             await db.commit()
             return existing is not None
 
-    async def get_all_jobs(self, limit=100, offset=0, status_filter=None, sort_by="end_time", sort_order="desc"):
+    async def get_all_jobs(self, limit=100, offset=0, status_filter=None, sort_by="end_time", sort_order="desc", filament_type_filter=None):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            where = ""
+            conditions = []
             params = []
             if status_filter and status_filter != "all":
-                where = "WHERE status = ?"
+                conditions.append("status = ?")
                 params.append(status_filter)
+            if filament_type_filter and filament_type_filter != "all":
+                conditions.append("filament_type = ?")
+                params.append(filament_type_filter)
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
             count_cursor = await db.execute(f"SELECT COUNT(*) FROM print_jobs {where}", params)
             total = (await count_cursor.fetchone())[0]
             allowed = ["end_time","start_time","total_cost","filename","filament_used_g","print_duration"]
@@ -200,6 +204,13 @@ class Database:
                 params + [limit, offset])
             rows = await cursor.fetchall()
             return [dict(row) for row in rows], total
+
+    async def get_distinct_filament_types(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT DISTINCT filament_type FROM print_jobs WHERE filament_type IS NOT NULL AND filament_type != 'Unbekannt' ORDER BY filament_type")
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
 
     async def get_job_by_id(self, job_id):
         async with aiosqlite.connect(self.db_path) as db:

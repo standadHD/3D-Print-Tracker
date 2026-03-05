@@ -84,6 +84,9 @@
                     <option value="cancelled">Abgebrochen</option>
                     <option value="error">Fehler</option>
                 </select>
+                <select id="filamentTypeFilter" onchange="loadJobs()">
+                    <option value="all">Alle Typen</option>
+                </select>
                 <select id="sortBy" onchange="loadJobs()">
                     <option value="end_time">Datum</option>
                     <option value="total_cost">Kosten</option>
