@@ -253,7 +253,13 @@ async def get_cfs_slots():
     all_spools = [spool_info(s) for s in spools_raw]
 
     # Locations aus Spoolman als Slots aufbauen
-    loc_names = [loc["name"] for loc in locations] if locations else []
+    # Spoolman gibt Locations als Liste von Strings zurueck
+    if locations and isinstance(locations[0], str):
+        loc_names = sorted(locations)
+    elif locations:
+        loc_names = sorted([loc["name"] for loc in locations])
+    else:
+        loc_names = []
     # Fallback falls keine Locations in Spoolman: eigene DB-Slots nutzen
     if not loc_names:
         db_slots = await db.get_cfs_slots()
