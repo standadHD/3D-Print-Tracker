@@ -167,7 +167,7 @@ async function loadJobs() {
         document.getElementById("jobCount").textContent = `${total} Auftraege`;
 
         if (jobs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Keine Druckauftraege gefunden. Klicke auf Sync!</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Keine Druckauftraege gefunden. Klicke auf Sync!</td></tr>';
             document.getElementById("pagination").innerHTML = "";
             return;
         }
@@ -179,6 +179,7 @@ async function loadJobs() {
                 <td>${formatDate(j.end_time || j.start_time)}</td>
                 <td>${formatDuration(j.print_duration)}</td>
                 <td>${(j.filament_used_g || 0).toFixed(1)}g</td>
+                <td>${j.filament_type ? `<span class="filament-type-badge">${j.filament_type}</span>` : "-"}</td>
                 <td>
                     ${j.filament_color ? `<span class="spool-color" style="background:${j.filament_color}"></span>` : ""}
                     ${j.spool_name ? j.spool_name.substring(0, 20) : "-"}

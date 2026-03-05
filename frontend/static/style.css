@@ -76,6 +76,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 .jobs-table td{padding:12px 14px;border-top:1px solid var(--border);white-space:nowrap}
 .jobs-table tr:hover td{background:var(--bg-hover)}
 .status-badge{padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.filament-type-badge{padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;background:rgba(139,92,246,.15);color:var(--filament-color)}
 .status-completed{background:rgba(52,211,153,.15);color:var(--success)}
 .status-cancelled{background:rgba(251,191,36,.15);color:var(--warning)}
 .status-error{background:rgba(248,113,113,.15);color:var(--danger)}
