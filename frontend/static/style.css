@@ -104,6 +104,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 .connection-details{display:flex;flex-direction:column;gap:10px}
 .conn-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--bg-primary);border-radius:var(--radius-sm)}
 .conn-label{font-weight:600}
+.settings-hint{font-size:.85rem;color:var(--text-secondary);margin:-8px 0 16px}
+.cfs-slots-list{display:flex;flex-direction:column;gap:10px}
+.cfs-slot-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg-primary);border-radius:var(--radius-sm);gap:12px}
+.cfs-slot-label{font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:8px;min-width:80px}
+.cfs-slot-select-wrap{display:flex;align-items:center;gap:8px;flex:1}
+.cfs-slot-select-wrap .spool-color{flex-shrink:0}
+.cfs-slot-select-wrap select{flex:1}
 .btn-edit{background:rgba(139,92,246,.15);color:var(--filament-color);border:1px solid rgba(139,92,246,.3);border-radius:var(--radius-sm);padding:6px 10px;cursor:pointer;font-size:.8rem;transition:background .2s}
 .btn-edit:hover{background:rgba(139,92,246,.3)}
 .actions-cell{display:flex;gap:6px;align-items:center}

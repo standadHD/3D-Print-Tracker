@@ -46,12 +46,21 @@ async def process_job(job):
     t_cost = calculator.calc_total_cost(f_cost, e_cost)
     thumbs = metadata.get("thumbnails", [])
     thumb = thumbs[-1].get("relative_path", "") if thumbs else ""
+    # CFS-Slot Auto-Matching anhand spool_id
+    slot_label = None
+    if fi["spool_id"]:
+        spool_to_slot = await db.get_spool_id_to_slot()
+        slot_label = spool_to_slot.get(fi["spool_id"])
+    # spool_name mit Slot-Label anreichern
+    spool_name = fi["spool_name"]
+    if slot_label:
+        spool_name = f"{slot_label} – {spool_name}"
     return {
         "moonraker_job_id": job_id, "filename": filename, "status": status,
         "start_time": job.get("start_time"), "end_time": job.get("end_time"),
         "print_duration": duration, "total_duration": job.get("total_duration", 0),
         "filament_used_mm": round(filament_mm, 2), "filament_used_g": filament_g,
-        "spool_id": fi["spool_id"], "spool_name": fi["spool_name"],
+        "spool_id": fi["spool_id"], "spool_name": spool_name,
         "filament_type": fi["filament_type"], "filament_color": fi["filament_color"],
         "filament_cost_per_kg": fi["cost_per_kg"],
         "filament_cost": f_cost, "electricity_cost": e_cost, "total_cost": t_cost,
@@ -220,6 +229,37 @@ async def update_settings(settings: dict):
 async def recalculate():
     await recalculate_all_costs()
     return {"message": "Neu berechnet"}
+
+# ── CFS Slot Konfiguration ───────────────────────────────────
+@app.get("/api/cfs-slots")
+async def get_cfs_slots():
+    slots = await db.get_cfs_slots()
+    spools = await spoolman.get_all_spools()
+    spool_map = {}
+    for s in spools:
+        f = s.get("filament", {})
+        v = (f.get("vendor") or {}).get("name", "")
+        name = f"{v} {f.get('name','')}".strip() or f"Spool #{s['id']}"
+        color = f.get("color_hex", "")
+        if color and not color.startswith("#"):
+            color = f"#{color}"
+        spool_map[s["id"]] = {"name": name, "color": color, "material": f.get("material", "")}
+    for slot in slots:
+        sid = slot["spool_id"]
+        slot["spool_info"] = spool_map.get(sid) if sid else None
+    return {"slots": slots, "spools": [{"id": s["id"], **spool_map[s["id"]]} for s in spools]}
+
+@app.post("/api/cfs-slots")
+async def update_cfs_slots(payload: dict):
+    """Erwartet: {slots: [{slot_key, spool_id}, ...]}"""
+    for item in payload.get("slots", []):
+        spool_id = item.get("spool_id")
+        await db.update_cfs_slot(
+            item["slot_key"],
+            int(spool_id) if spool_id else None
+        )
+    return {"message": "CFS-Slots gespeichert"}
+# ─────────────────────────────────────────────────────────────
 
 @app.get("/api/debug/printer-objects")
 async def debug_printer_objects():

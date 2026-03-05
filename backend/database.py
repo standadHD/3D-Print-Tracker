@@ -11,6 +11,27 @@ class Database:
     async def initialize(self):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
+                CREATE TABLE IF NOT EXISTS cfs_slots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slot_key TEXT UNIQUE NOT NULL,
+                    slot_label TEXT NOT NULL,
+                    spool_id INTEGER,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            # Default-Slots anlegen
+            default_slots = [
+                ("CFS1A", "CFS 1A"),
+                ("CFS1B", "CFS 1B"),
+                ("CFS1C", "CFS 1C"),
+                ("CFS1D", "CFS 1D"),
+                ("LAGER", "Lager"),
+            ]
+            for key, label in default_slots:
+                await db.execute(
+                    "INSERT OR IGNORE INTO cfs_slots (slot_key, slot_label, spool_id) VALUES (?,?,NULL)",
+                    (key, label))
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS print_jobs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     moonraker_job_id TEXT UNIQUE,
@@ -234,6 +255,29 @@ class Database:
             """, (spool_id, spool_name, filament_type, filament_color,
                    cost_per_kg, filament_cost, electricity_cost, total_cost, job_id))
             await db.commit()
+
+    async def get_cfs_slots(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT slot_key, slot_label, spool_id FROM cfs_slots ORDER BY id")
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def update_cfs_slot(self, slot_key, spool_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE cfs_slots SET spool_id=?, updated_at=CURRENT_TIMESTAMP WHERE slot_key=?",
+                (spool_id, slot_key))
+            await db.commit()
+
+    async def get_spool_id_to_slot(self):
+        """Gibt ein Dict {spool_id: slot_label} zurueck fuer Auto-Matching beim Sync"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT slot_label, spool_id FROM cfs_slots WHERE spool_id IS NOT NULL")
+            rows = await cursor.fetchall()
+            return {row["spool_id"]: row["slot_label"] for row in rows}
 
     async def delete_job(self, job_id):
         async with aiosqlite.connect(self.db_path) as db:
