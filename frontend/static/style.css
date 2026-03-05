@@ -129,6 +129,11 @@ dialog#spoolModal::backdrop{background:rgba(0,0,0,.6)}
 .modal-select{width:100%;padding:10px 14px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem}
 .modal-select:focus{outline:none;border-color:var(--accent)}
 .modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border)}
+.modal-divider{height:1px;background:var(--border);margin:8px 0}
+.modal-input{width:100%;padding:10px 14px;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem}
+.modal-input:focus{outline:none;border-color:var(--accent)}
+.input-with-hint{display:flex;flex-direction:column;gap:4px}
+.input-hint{font-size:.8rem;color:var(--text-muted)}
 .text-center{text-align:center}
 .text-muted{color:var(--text-muted)}
 .toast{position:fixed;bottom:20px;right:20px;padding:14px 24px;border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:.9rem;transform:translateY(100px);opacity:0;transition:all .3s;z-index:1000}

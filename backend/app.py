@@ -106,23 +106,18 @@ async def check_printer_state():
         logger.error(f"Printer check Fehler: {e}")
 
 async def recalculate_all_costs():
-    logger.info("Berechne alle Kosten neu...")
+    """Berechnet nur Filamentkosten neu. Historische Stromkosten bleiben unveraendert."""
+    logger.info("Berechne Filamentkosten neu (Stromkosten unveraendert)...")
     jobs, total = await db.get_all_jobs(limit=99999)
-    el_kwh = await db.get_setting("electricity_cost_per_kwh")
-    pr_watts = await db.get_setting("printer_power_watts")
     def_cost = await db.get_setting("default_filament_cost_per_kg")
     for job in jobs:
         cpkg = job.get("filament_cost_per_kg") or def_cost
         fg = job.get("filament_used_g", 0)
-        dur = job.get("print_duration", 0)
         fc = calculator.calc_filament_cost(fg, cpkg)
-        ec = calculator.calc_electricity_cost(dur, pr_watts, el_kwh)
+        ec = job.get("electricity_cost") or 0  # Historische Stromkosten beibehalten
         tc = calculator.calc_total_cost(fc, ec)
-        job["filament_cost"] = fc
-        job["electricity_cost"] = ec
-        job["total_cost"] = tc
-        await db.insert_job(job)
-    logger.info(f"{len(jobs)} Jobs neu berechnet")
+        await db.update_job_filament(job["id"], fg, fc, ec, tc)
+    logger.info(f"{len(jobs)} Jobs neu berechnet (nur Filamentkosten)")
 
 @asynccontextmanager
 async def lifespan(a):
@@ -171,6 +166,19 @@ async def get_job(job_id: int):
         raise HTTPException(404, "Job nicht gefunden")
     return job
 
+@app.patch("/api/jobs/{job_id}/filament")
+async def update_job_filament(job_id: int, payload: dict):
+    job = await db.get_job_by_id(job_id)
+    if not job:
+        raise HTTPException(404, "Job nicht gefunden")
+    filament_g = float(payload.get("filament_used_g", job["filament_used_g"] or 0))
+    cost_per_kg = job.get("filament_cost_per_kg") or await db.get_setting("default_filament_cost_per_kg")
+    f_cost = calculator.calc_filament_cost(filament_g, cost_per_kg)
+    e_cost = job.get("electricity_cost") or 0  # Historische Stromkosten beibehalten
+    t_cost = calculator.calc_total_cost(f_cost, e_cost)
+    await db.update_job_filament(job_id, filament_g, f_cost, e_cost, t_cost)
+    return {"message": "Filament aktualisiert", "filament_used_g": filament_g, "filament_cost": f_cost, "total_cost": t_cost}
+
 @app.patch("/api/jobs/{job_id}/spool")
 async def update_job_spool(job_id: int, payload: dict):
     job = await db.get_job_by_id(job_id)
@@ -179,10 +187,8 @@ async def update_job_spool(job_id: int, payload: dict):
     spool_id = payload.get("spool_id")
     spool = await spoolman.get_spool_by_id(spool_id) if spool_id else None
     fi = await spoolman.get_filament_info(spool)
-    el_kwh = await db.get_setting("electricity_cost_per_kwh")
-    pr_watts = await db.get_setting("printer_power_watts")
     f_cost = calculator.calc_filament_cost(job["filament_used_g"], fi["cost_per_kg"])
-    e_cost = calculator.calc_electricity_cost(job["print_duration"], pr_watts, el_kwh)
+    e_cost = job.get("electricity_cost") or 0  # Historische Stromkosten beibehalten
     t_cost = calculator.calc_total_cost(f_cost, e_cost)
     await db.update_job_spool(
         job_id,

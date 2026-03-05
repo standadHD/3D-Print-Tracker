@@ -188,7 +188,7 @@ async function loadJobs() {
                 <td>${(j.electricity_cost || 0).toFixed(3)}</td>
                 <td style="font-weight:700">${(j.total_cost || 0).toFixed(3)}</td>
                 <td class="actions-cell">
-                    <button class="btn-edit" onclick="openSpoolModal(${j.id}, '${(j.filename||'').replace(/'/g,"\\'").substring(0,40)}', ${j.spool_id || 'null'})" title="Spule ändern">
+                    <button class="btn-edit" onclick="openSpoolModal(${j.id}, '${(j.filename||'').replace(/'/g,"\\'").substring(0,40)}', ${j.spool_id || 'null'}, ${j.filament_used_g || 0})" title="Spule / Filament ändern">
                         <i class="fas fa-circle-notch"></i>
                     </button>
                     <button class="btn-danger" onclick="deleteJob(${j.id})" title="Löschen">
@@ -421,9 +421,14 @@ function renderCfsSlots() {
 let _modalJobId = null;
 let _allSpools = [];
 
-async function openSpoolModal(jobId, filename, currentSpoolId) {
+async function openSpoolModal(jobId, filename, currentSpoolId, currentFilamentG) {
     _modalJobId = jobId;
     document.getElementById("modalJobName").textContent = filename || `Job #${jobId}`;
+    // Filamentgewicht vorbelegen
+    const filInput = document.getElementById("modalFilamentG");
+    filInput.value = currentFilamentG > 0 ? currentFilamentG.toFixed(1) : "";
+    document.getElementById("modalFilamentHint").textContent =
+        currentFilamentG > 0 ? `Aktuell: ${currentFilamentG.toFixed(1)}g` : "Kein Wert erfasst";
 
     const slotSel = document.getElementById("modalSlotSelect");
     const spoolSel = document.getElementById("modalSpoolSelect");
@@ -480,6 +485,7 @@ async function saveSpoolAssignment() {
     if (!_modalJobId) return;
     const slotKey = document.getElementById("modalSlotSelect").value;
     const spoolId = document.getElementById("modalSpoolSelect").value;
+    const filamentG = document.getElementById("modalFilamentG").value;
 
     // Spule ermitteln: direkte Auswahl hat Vorrang, sonst erste Spule des Slots
     let resolvedSpoolId = spoolId ? parseInt(spoolId) : null;
@@ -489,13 +495,34 @@ async function saveSpoolAssignment() {
     }
 
     try {
-        const r = await fetch(`${API}/jobs/${_modalJobId}/spool`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ spool_id: resolvedSpoolId })
-        });
-        if (r.ok) {
-            showToast("Spule aktualisiert", "success");
+        const requests = [];
+
+        // Spule speichern wenn geändert
+        if (resolvedSpoolId || slotKey) {
+            requests.push(fetch(`${API}/jobs/${_modalJobId}/spool`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ spool_id: resolvedSpoolId })
+            }));
+        }
+
+        // Filamentgewicht speichern wenn eingegeben
+        if (filamentG !== "") {
+            requests.push(fetch(`${API}/jobs/${_modalJobId}/filament`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filament_used_g: parseFloat(filamentG) })
+            }));
+        }
+
+        if (requests.length === 0) {
+            document.getElementById("spoolModal").close();
+            return;
+        }
+
+        const results = await Promise.all(requests);
+        if (results.every(r => r.ok)) {
+            showToast("Gespeichert", "success");
             document.getElementById("spoolModal").close();
             _modalJobId = null;
             loadJobs();

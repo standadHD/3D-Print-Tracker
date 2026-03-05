@@ -159,6 +159,14 @@
                 <label>Spule (optional überschreiben)</label>
                 <select id="modalSpoolSelect" class="modal-select"></select>
             </div>
+            <div class="modal-divider"></div>
+            <div class="form-group">
+                <label><i class="fas fa-weight-hanging"></i> Filament verbraucht (g)</label>
+                <div class="input-with-hint">
+                    <input type="number" id="modalFilamentG" class="modal-input" step="0.1" min="0" placeholder="z.B. 45.5">
+                    <span class="input-hint" id="modalFilamentHint"></span>
+                </div>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeSpoolModal()">Abbrechen</button>
