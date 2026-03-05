@@ -186,13 +186,15 @@ async def update_job_filament(job_id: int, payload: dict):
 
 @app.patch("/api/jobs/{job_id}/spool")
 async def update_job_spool(job_id: int, payload: dict):
+    # Job frisch aus DB laden um aktuelles Filamentgewicht zu haben (koennte gerade geaendert worden sein)
     job = await db.get_job_by_id(job_id)
     if not job:
         raise HTTPException(404, "Job nicht gefunden")
     spool_id = payload.get("spool_id")
     spool = await spoolman.get_spool_by_id(spool_id) if spool_id else None
     fi = await spoolman.get_filament_info(spool)
-    f_cost = calculator.calc_filament_cost(job["filament_used_g"], fi["cost_per_kg"])
+    filament_g = job["filament_used_g"] or 0  # Aktuelles Gewicht aus DB
+    f_cost = calculator.calc_filament_cost(filament_g, fi["cost_per_kg"])
     e_cost = job.get("electricity_cost") or 0  # Historische Stromkosten beibehalten
     t_cost = calculator.calc_total_cost(f_cost, e_cost)
     await db.update_job_spool(

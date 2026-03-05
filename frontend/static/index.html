@@ -77,33 +77,32 @@
 
     <div class="tab-content" id="tab-jobs">
         <div class="toolbar">
-            <div class="toolbar-left">
-                <select id="statusFilter" onchange="loadJobs()">
-                    <option value="all">Alle Status</option>
-                    <option value="completed">Erfolgreich</option>
-                    <option value="cancelled">Abgebrochen</option>
-                    <option value="error">Fehler</option>
-                </select>
-                <select id="filamentTypeFilter" onchange="loadJobs()">
-                    <option value="all">Alle Typen</option>
-                </select>
-                <select id="sortBy" onchange="loadJobs()">
-                    <option value="end_time">Datum</option>
-                    <option value="total_cost">Kosten</option>
-                    <option value="filename">Dateiname</option>
-                    <option value="filament_used_g">Filament</option>
-                    <option value="print_duration">Druckzeit</option>
-                </select>
-                <button class="btn-small" onclick="toggleSortOrder()">
-                    <i class="fas fa-sort" id="sortOrderIcon"></i></button>
-            </div>
             <div class="toolbar-right"><span id="jobCount" class="job-count"></span></div>
         </div>
         <div class="table-container">
             <table class="jobs-table"><thead><tr>
-                <th>Status</th><th>Dateiname</th><th>Datum</th><th>Druckzeit</th>
-                <th>Filament</th><th>Typ</th><th>Spule</th><th>Fil. EUR</th><th>Strom EUR</th>
-                <th>Gesamt</th><th></th>
+                <th>
+                    <select id="statusFilter" class="th-filter" onchange="goToPage(0);loadJobs()">
+                        <option value="all">Alle Status</option>
+                        <option value="completed">Erfolgreich</option>
+                        <option value="cancelled">Abgebrochen</option>
+                        <option value="error">Fehler</option>
+                    </select>
+                </th>
+                <th class="th-sortable" onclick="setSortBy('filename')">Dateiname <span id="sort-filename" class="sort-icon"></span></th>
+                <th class="th-sortable" onclick="setSortBy('end_time')">Datum <span id="sort-end_time" class="sort-icon">↓</span></th>
+                <th class="th-sortable" onclick="setSortBy('print_duration')">Druckzeit <span id="sort-print_duration" class="sort-icon"></span></th>
+                <th class="th-sortable" onclick="setSortBy('filament_used_g')">Filament <span id="sort-filament_used_g" class="sort-icon"></span></th>
+                <th>
+                    <select id="filamentTypeFilter" class="th-filter" onchange="goToPage(0);loadJobs()">
+                        <option value="all">Alle Typen</option>
+                    </select>
+                </th>
+                <th>Spule</th>
+                <th>Fil. EUR</th>
+                <th>Strom EUR</th>
+                <th class="th-sortable" onclick="setSortBy('total_cost')">Gesamt <span id="sort-total_cost" class="sort-icon"></span></th>
+                <th></th>
             </tr></thead>
             <tbody id="jobsTableBody"><tr><td colspan="10" class="text-center text-muted">Lade...</td></tr></tbody>
             </table>

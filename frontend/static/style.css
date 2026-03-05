@@ -72,7 +72,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 .job-count{font-size:.85rem;color:var(--text-secondary)}
 .table-container{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
 .jobs-table{width:100%;border-collapse:collapse;font-size:.85rem}
-.jobs-table th{background:var(--bg-secondary);padding:12px 14px;text-align:left;font-weight:600;color:var(--text-secondary);white-space:nowrap}
+.jobs-table th{background:var(--bg-secondary);padding:8px 14px;text-align:left;font-weight:600;color:var(--text-secondary);white-space:nowrap}
+.th-sortable{cursor:pointer;user-select:none}
+.th-sortable:hover{color:var(--text-primary);background:var(--bg-hover)}
+.sort-icon{font-size:.8rem;color:var(--accent);margin-left:2px}
+.th-filter{background:var(--bg-primary);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;font-size:.8rem;width:100%;cursor:pointer}
+.th-filter:focus{outline:none;border-color:var(--accent)}
+.th-filter option{background:var(--bg-card)}
 .jobs-table td{padding:12px 14px;border-top:1px solid var(--border);white-space:nowrap}
 .jobs-table tr:hover td{background:var(--bg-hover)}
 .status-badge{padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600}

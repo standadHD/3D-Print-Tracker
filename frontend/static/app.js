@@ -142,11 +142,27 @@ function getStatusBadge(status) {
     return `<span class="status-badge ${cls}">${label}</span>`;
 }
 
-function toggleSortOrder() {
-    sortOrder = sortOrder === "desc" ? "asc" : "desc";
-    document.getElementById("sortOrderIcon").className =
-        `fas fa-sort-${sortOrder === "desc" ? "down" : "up"}`;
+let currentSortBy = "end_time";
+
+function setSortBy(field) {
+    if (currentSortBy === field) {
+        sortOrder = sortOrder === "desc" ? "asc" : "desc";
+    } else {
+        currentSortBy = field;
+        sortOrder = "desc";
+    }
+    updateSortIcons();
+    goToPage(0);
     loadJobs();
+}
+
+function updateSortIcons() {
+    const fields = ["filename", "end_time", "print_duration", "filament_used_g", "total_cost"];
+    fields.forEach(f => {
+        const el = document.getElementById(`sort-${f}`);
+        if (!el) return;
+        el.textContent = f === currentSortBy ? (sortOrder === "desc" ? "↓" : "↑") : "";
+    });
 }
 
 async function loadFilamentTypeFilter() {
@@ -163,10 +179,9 @@ async function loadJobs() {
     try {
         const status = document.getElementById("statusFilter").value;
         const filamentType = document.getElementById("filamentTypeFilter").value;
-        const sort = document.getElementById("sortBy").value;
         const offset = currentPage * pageSize;
 
-        let url = `${API}/jobs?limit=${pageSize}&offset=${offset}&sort_by=${sort}&sort_order=${sortOrder}`;
+        let url = `${API}/jobs?limit=${pageSize}&offset=${offset}&sort_by=${currentSortBy}&sort_order=${sortOrder}`;
         if (status !== "all") url += `&status=${status}`;
         if (filamentType !== "all") url += `&filament_type=${encodeURIComponent(filamentType)}`;
 
@@ -508,33 +523,33 @@ async function saveSpoolAssignment() {
     }
 
     try {
-        const requests = [];
+        let ok = true;
 
-        // Spule speichern wenn geändert
-        if (resolvedSpoolId || slotKey) {
-            requests.push(fetch(`${API}/jobs/${_modalJobId}/spool`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ spool_id: resolvedSpoolId })
-            }));
-        }
-
-        // Filamentgewicht speichern wenn eingegeben
+        // Erst Filament speichern, dann Spule — damit Spule das neue Gewicht fuer Kostenberechnung nutzt
         if (filamentG !== "") {
-            requests.push(fetch(`${API}/jobs/${_modalJobId}/filament`, {
+            const r = await fetch(`${API}/jobs/${_modalJobId}/filament`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ filament_used_g: parseFloat(filamentG) })
-            }));
+            });
+            if (!r.ok) ok = false;
         }
 
-        if (requests.length === 0) {
+        if (ok && (resolvedSpoolId || slotKey)) {
+            const r = await fetch(`${API}/jobs/${_modalJobId}/spool`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ spool_id: resolvedSpoolId })
+            });
+            if (!r.ok) ok = false;
+        }
+
+        if (!filamentG && !resolvedSpoolId && !slotKey) {
             document.getElementById("spoolModal").close();
             return;
         }
 
-        const results = await Promise.all(requests);
-        if (results.every(r => r.ok)) {
+        if (ok) {
             showToast("Gespeichert", "success");
             document.getElementById("spoolModal").close();
             _modalJobId = null;
