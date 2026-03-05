@@ -181,18 +181,12 @@ async def update_job_spool(job_id: int, payload: dict):
     f_cost = calculator.calc_filament_cost(job["filament_used_g"], fi["cost_per_kg"])
     e_cost = calculator.calc_electricity_cost(job["print_duration"], pr_watts, el_kwh)
     t_cost = calculator.calc_total_cost(f_cost, e_cost)
-    job.update({
-        "spool_id": fi["spool_id"],
-        "spool_name": fi["spool_name"],
-        "filament_type": fi["filament_type"],
-        "filament_color": fi["filament_color"],
-        "filament_cost_per_kg": fi["cost_per_kg"],
-        "filament_cost": f_cost,
-        "electricity_cost": e_cost,
-        "total_cost": t_cost,
-    })
-    await db.insert_job(job)
-    return {"message": "Spule aktualisiert", "job": job}
+    await db.update_job_spool(
+        job_id,
+        fi["spool_id"], fi["spool_name"], fi["filament_type"], fi["filament_color"],
+        fi["cost_per_kg"], f_cost, e_cost, t_cost
+    )
+    return {"message": "Spule aktualisiert"}
 
 @app.delete("/api/jobs/{job_id}")
 async def delete_job(job_id: int):

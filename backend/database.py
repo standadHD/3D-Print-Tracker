@@ -178,6 +178,18 @@ class Database:
             stats["by_month"] = [dict(r) for r in await c3.fetchall()]
             return stats
 
+    async def update_job_spool(self, job_id, spool_id, spool_name, filament_type, filament_color, cost_per_kg, filament_cost, electricity_cost, total_cost):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE print_jobs SET
+                    spool_id=?, spool_name=?, filament_type=?, filament_color=?,
+                    filament_cost_per_kg=?, filament_cost=?, electricity_cost=?, total_cost=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (spool_id, spool_name, filament_type, filament_color,
+                   cost_per_kg, filament_cost, electricity_cost, total_cost, job_id))
+            await db.commit()
+
     async def delete_job(self, job_id):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM print_jobs WHERE id = ?", (job_id,))
