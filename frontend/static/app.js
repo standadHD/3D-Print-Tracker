@@ -186,8 +186,11 @@ async function loadJobs() {
                 <td>${(j.filament_cost || 0).toFixed(3)}</td>
                 <td>${(j.electricity_cost || 0).toFixed(3)}</td>
                 <td style="font-weight:700">${(j.total_cost || 0).toFixed(3)}</td>
-                <td>
-                    <button class="btn-danger" onclick="deleteJob(${j.id})" title="Loeschen">
+                <td class="actions-cell">
+                    <button class="btn-edit" onclick="openSpoolModal(${j.id}, '${(j.filename||'').replace(/'/g,"\\'").substring(0,40)}', ${j.spool_id || 'null'})" title="Spule ändern">
+                        <i class="fas fa-circle-notch"></i>
+                    </button>
+                    <button class="btn-danger" onclick="deleteJob(${j.id})" title="Löschen">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -366,6 +369,68 @@ async function saveSettings() {
         showToast("Fehler beim Speichern", "error");
     }
 }
+
+// ── Spool Modal ────────────────────────────────────────────
+let _modalJobId = null;
+let _allSpools = [];
+
+async function openSpoolModal(jobId, filename, currentSpoolId) {
+    _modalJobId = jobId;
+    document.getElementById("modalJobName").textContent = filename || `Job #${jobId}`;
+
+    const select = document.getElementById("modalSpoolSelect");
+    select.innerHTML = '<option value="">Lade Spulen...</option>';
+    document.getElementById("spoolModal").style.display = "flex";
+
+    try {
+        const r = await fetch(`${API}/spools`);
+        _allSpools = await r.json();
+
+        select.innerHTML = _allSpools.map(s => {
+            const filament = s.filament || {};
+            const vendor = (filament.vendor || {}).name || "";
+            const name = `${vendor} ${filament.name || ""}`.trim() || `Spool #${s.id}`;
+            const material = filament.material ? ` [${filament.material}]` : "";
+            const remaining = s.remaining_weight != null ? ` – ${s.remaining_weight.toFixed(0)}g` : "";
+            const selected = s.id == currentSpoolId ? " selected" : "";
+            return `<option value="${s.id}"${selected}>${name}${material}${remaining}</option>`;
+        }).join("");
+
+        if (!currentSpoolId) select.selectedIndex = 0;
+    } catch (e) {
+        select.innerHTML = '<option value="">Fehler beim Laden</option>';
+    }
+}
+
+function closeSpoolModal(event) {
+    if (event && event.target !== document.getElementById("spoolModal")) return;
+    document.getElementById("spoolModal").style.display = "none";
+    _modalJobId = null;
+}
+
+async function saveSpoolAssignment() {
+    if (!_modalJobId) return;
+    const spoolId = document.getElementById("modalSpoolSelect").value;
+    try {
+        const r = await fetch(`${API}/jobs/${_modalJobId}/spool`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ spool_id: spoolId ? parseInt(spoolId) : null })
+        });
+        if (r.ok) {
+            showToast("Spule aktualisiert", "success");
+            document.getElementById("spoolModal").style.display = "none";
+            _modalJobId = null;
+            loadJobs();
+            loadDashboard();
+        } else {
+            showToast("Fehler beim Speichern", "error");
+        }
+    } catch (e) {
+        showToast("Fehler beim Speichern", "error");
+    }
+}
+// ────────────────────────────────────────────────────────────
 
 async function recalculateCosts() {
     try {

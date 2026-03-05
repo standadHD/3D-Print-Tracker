@@ -168,6 +168,32 @@ async def get_job(job_id: int):
         raise HTTPException(404, "Job nicht gefunden")
     return job
 
+@app.patch("/api/jobs/{job_id}/spool")
+async def update_job_spool(job_id: int, payload: dict):
+    job = await db.get_job_by_id(job_id)
+    if not job:
+        raise HTTPException(404, "Job nicht gefunden")
+    spool_id = payload.get("spool_id")
+    spool = await spoolman.get_spool_by_id(spool_id) if spool_id else None
+    fi = await spoolman.get_filament_info(spool)
+    el_kwh = await db.get_setting("electricity_cost_per_kwh")
+    pr_watts = await db.get_setting("printer_power_watts")
+    f_cost = calculator.calc_filament_cost(job["filament_used_g"], fi["cost_per_kg"])
+    e_cost = calculator.calc_electricity_cost(job["print_duration"], pr_watts, el_kwh)
+    t_cost = calculator.calc_total_cost(f_cost, e_cost)
+    job.update({
+        "spool_id": fi["spool_id"],
+        "spool_name": fi["spool_name"],
+        "filament_type": fi["filament_type"],
+        "filament_color": fi["filament_color"],
+        "filament_cost_per_kg": fi["cost_per_kg"],
+        "filament_cost": f_cost,
+        "electricity_cost": e_cost,
+        "total_cost": t_cost,
+    })
+    await db.insert_job(job)
+    return {"message": "Spule aktualisiert", "job": job}
+
 @app.delete("/api/jobs/{job_id}")
 async def delete_job(job_id: int):
     job = await db.get_job_by_id(job_id)

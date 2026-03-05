@@ -136,6 +136,27 @@
         </div>
     </div>
 </div>
+<!-- Spool Edit Modal -->
+<div id="spoolModal" class="modal-overlay" style="display:none" onclick="closeSpoolModal(event)">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3><i class="fas fa-circle-notch"></i> Spule zuordnen</h3>
+            <button class="modal-close" onclick="closeSpoolModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-job-name" id="modalJobName"></p>
+            <div class="form-group">
+                <label>Spule auswählen</label>
+                <select id="modalSpoolSelect" class="modal-select"></select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeSpoolModal()">Abbrechen</button>
+            <button class="btn btn-primary" onclick="saveSpoolAssignment()"><i class="fas fa-save"></i> Speichern</button>
+        </div>
+    </div>
+</div>
+
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>
