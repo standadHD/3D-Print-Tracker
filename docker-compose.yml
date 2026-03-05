@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    container_name: print-tracker-backend
+    ports:
+      - "8099:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - MOONRAKER_URL=http://192.168.40.13:7125
+      - SPOOLMAN_URL=http://192.168.11.48:7912
+      - DATABASE_PATH=/app/data/print_tracker.db
+      - POLL_INTERVAL=30
+      - ELECTRICITY_COST_PER_KWH=0.23
+      - PRINTER_POWER_WATTS=200
+      - DEFAULT_FILAMENT_COST_PER_KG=25.00
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    container_name: print-tracker-frontend
+    ports:
+      - "8100:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

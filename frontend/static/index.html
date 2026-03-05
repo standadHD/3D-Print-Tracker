@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Print Cost Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+<div id="app">
+    <header class="header">
+        <div class="header-left">
+            <i class="fas fa-cube header-icon"></i>
+            <h1>3D Print Cost Tracker</h1>
+        </div>
+        <div class="header-right">
+            <div class="connection-status">
+                <span class="status-dot" id="moonrakerDot"></span>
+                <span>Moonraker</span>
+                <span class="status-dot" id="spoolmanDot"></span>
+                <span>Spoolman</span>
+            </div>
+            <button class="btn btn-primary" onclick="triggerSync()">
+                <i class="fas fa-sync-alt" id="syncIcon"></i> Sync
+            </button>
+        </div>
+    </header>
+    <nav class="tabs">
+        <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
+            <i class="fas fa-chart-pie"></i> Dashboard</button>
+        <button class="tab" data-tab="jobs" onclick="switchTab('jobs')">
+            <i class="fas fa-list"></i> Druckauftraege</button>
+        <button class="tab" data-tab="spools" onclick="switchTab('spools')">
+            <i class="fas fa-circle-notch"></i> Spulen</button>
+        <button class="tab" data-tab="settings" onclick="switchTab('settings')">
+            <i class="fas fa-cog"></i> Einstellungen</button>
+    </nav>
+
+    <div class="tab-content active" id="tab-dashboard">
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-euro-sign"></i></div>
+                <div class="stat-info"><span class="stat-value" id="totalCost">0.00 EUR</span>
+                <span class="stat-label">Gesamtkosten</span></div></div>
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-print"></i></div>
+                <div class="stat-info"><span class="stat-value" id="totalJobs">0</span>
+                <span class="stat-label">Drucke gesamt</span></div></div>
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                <div class="stat-info"><span class="stat-value" id="completedJobs">0</span>
+                <span class="stat-label">Erfolgreich</span></div></div>
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+                <div class="stat-info"><span class="stat-value" id="failedJobs">0</span>
+                <span class="stat-label">Fehlgeschlagen</span></div></div>
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-weight-hanging"></i></div>
+                <div class="stat-info"><span class="stat-value" id="totalFilament">0 g</span>
+                <span class="stat-label">Filament verbraucht</span></div></div>
+            <div class="stat-card"><div class="stat-icon"><i class="fas fa-calculator"></i></div>
+                <div class="stat-info"><span class="stat-value" id="avgCost">0.00 EUR</span>
+                <span class="stat-label">Durchschn. Kosten</span></div></div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="card"><h3><i class="fas fa-bolt"></i> Kostenverteilung</h3>
+                <div class="cost-breakdown">
+                    <div class="cost-bar"><span class="cost-label">Filament</span>
+                        <div class="bar-container"><div class="bar filament-bar" id="filamentBar"></div></div>
+                        <span class="cost-value" id="totalFilamentCost">0.00 EUR</span></div>
+                    <div class="cost-bar"><span class="cost-label">Strom</span>
+                        <div class="bar-container"><div class="bar electricity-bar" id="electricityBar"></div></div>
+                        <span class="cost-value" id="totalElectricityCost">0.00 EUR</span></div>
+                </div></div>
+            <div class="card"><h3><i class="fas fa-layer-group"></i> Nach Filamenttyp</h3>
+                <div id="filamentTypeStats" class="filament-type-list"><p class="text-muted">Keine Daten</p></div></div>
+            <div class="card full-width"><h3><i class="fas fa-calendar-alt"></i> Kosten/Monat</h3>
+                <div id="monthlyStats"><p class="text-muted">Keine Daten</p></div></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-jobs">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <select id="statusFilter" onchange="loadJobs()">
+                    <option value="all">Alle Status</option>
+                    <option value="completed">Erfolgreich</option>
+                    <option value="cancelled">Abgebrochen</option>
+                    <option value="error">Fehler</option>
+                </select>
+                <select id="sortBy" onchange="loadJobs()">
+                    <option value="end_time">Datum</option>
+                    <option value="total_cost">Kosten</option>
+                    <option value="filename">Dateiname</option>
+                    <option value="filament_used_g">Filament</option>
+                    <option value="print_duration">Druckzeit</option>
+                </select>
+                <button class="btn-small" onclick="toggleSortOrder()">
+                    <i class="fas fa-sort" id="sortOrderIcon"></i></button>
+            </div>
+            <div class="toolbar-right"><span id="jobCount" class="job-count"></span></div>
+        </div>
+        <div class="table-container">
+            <table class="jobs-table"><thead><tr>
+                <th>Status</th><th>Dateiname</th><th>Datum</th><th>Druckzeit</th>
+                <th>Filament</th><th>Spule</th><th>Fil. EUR</th><th>Strom EUR</th>
+                <th>Gesamt</th><th></th>
+            </tr></thead>
+            <tbody id="jobsTableBody"><tr><td colspan="10" class="text-center text-muted">Lade...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div class="tab-content" id="tab-spools">
+        <div class="spools-grid" id="spoolsGrid"><p class="text-muted">Lade Spulen...</p></div>
+    </div>
+
+    <div class="tab-content" id="tab-settings">
+        <div class="card settings-card">
+            <h3><i class="fas fa-sliders-h"></i> Kosteneinstellungen</h3>
+            <div class="settings-form">
+                <div class="form-group"><label><i class="fas fa-bolt"></i> Stromkosten (EUR/kWh)</label>
+                    <input type="number" id="settingElectricity" step="0.01" min="0"></div>
+                <div class="form-group"><label><i class="fas fa-plug"></i> Druckerleistung (Watt)</label>
+                    <input type="number" id="settingPower" step="1" min="0"></div>
+                <div class="form-group"><label><i class="fas fa-circle"></i> Standard Filamentpreis (EUR/kg)</label>
+                    <input type="number" id="settingFilament" step="0.01" min="0"></div>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        <i class="fas fa-save"></i> Speichern</button>
+                    <button class="btn btn-secondary" onclick="recalculateCosts()">
+                        <i class="fas fa-calculator"></i> Neu berechnen</button>
+                </div>
+            </div>
+        </div>
+        <div class="card settings-card">
+            <h3><i class="fas fa-info-circle"></i> Verbindungsstatus</h3>
+            <div id="connectionDetails" class="connection-details"></div>
+        </div>
+    </div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
