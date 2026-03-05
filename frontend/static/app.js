@@ -261,7 +261,10 @@ async function loadSpools() {
             const remaining = s.remaining_weight || 0;
             const total = filament.weight || 1000;
             const pct = Math.min(100, Math.max(0, (remaining / total) * 100));
-            const price = s.price || filament.price || 0;
+            const spoolPrice = (s.price != null && s.price > 0) ? s.price : null;
+            const filamentPrice = (filament.price != null && filament.price > 0) ? filament.price : null;
+            const price = spoolPrice !== null ? spoolPrice : (filamentPrice || 0);
+            const priceLabel = spoolPrice !== null ? "Spulenpreis" : (filamentPrice ? "Filamentpreis" : "Preis");
             const weight = filament.weight || 0;
 
             return `
@@ -278,7 +281,7 @@ async function loadSpools() {
                         <span class="spool-detail-value">${remaining.toFixed(0)}g / ${total}g</span>
                     </div>
                     <div class="spool-detail">
-                        <span class="spool-detail-label">Preis</span>
+                        <span class="spool-detail-label">${priceLabel}</span>
                         <span class="spool-detail-value">${price > 0 ? price.toFixed(2) + " EUR" : "-"}</span>
                     </div>
                     <div class="spool-detail">
