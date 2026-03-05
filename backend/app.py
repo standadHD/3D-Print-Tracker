@@ -301,6 +301,35 @@ async def update_cfs_slots(payload: dict):
     return {"message": "Slots gespeichert"}
 # ─────────────────────────────────────────────────────────────
 
+@app.get("/api/debug/job-sync-check")
+async def debug_job_sync_check():
+    """Vergleicht Moonraker Job-History mit der lokalen DB"""
+    moonraker_jobs = await moonraker.get_all_job_history()
+    moonraker_ids = {str(j.get("job_id")) for j in moonraker_jobs}
+
+    # Alle IDs aus der DB holen
+    db_ids = await db.get_all_moonraker_job_ids()
+
+    missing_in_db = moonraker_ids - db_ids
+    extra_in_db = db_ids - moonraker_ids
+
+    # Details der fehlenden Jobs
+    missing_details = [
+        {"job_id": j.get("job_id"), "filename": j.get("filename"), "status": j.get("status"),
+         "end_time": j.get("end_time")}
+        for j in moonraker_jobs if str(j.get("job_id")) in missing_in_db
+    ]
+
+    return {
+        "moonraker_total": len(moonraker_ids),
+        "db_total": len(db_ids),
+        "missing_in_db_count": len(missing_in_db),
+        "extra_in_db_count": len(extra_in_db),
+        "missing_in_db": sorted(missing_details, key=lambda x: x.get("end_time") or 0),
+        "extra_in_db": sorted(extra_in_db),
+        "in_sync": len(missing_in_db) == 0
+    }
+
 @app.get("/api/debug/spoolman")
 async def debug_spoolman():
     locations = await spoolman.get_all_locations()

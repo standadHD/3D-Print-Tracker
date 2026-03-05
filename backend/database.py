@@ -217,6 +217,12 @@ class Database:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows], total
 
+    async def get_all_moonraker_job_ids(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT moonraker_job_id FROM print_jobs")
+            rows = await cursor.fetchall()
+            return {row[0] for row in rows}
+
     async def get_distinct_filament_types(self):
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
