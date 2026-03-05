@@ -380,7 +380,7 @@ async function openSpoolModal(jobId, filename, currentSpoolId) {
 
     const select = document.getElementById("modalSpoolSelect");
     select.innerHTML = '<option value="">Lade Spulen...</option>';
-    document.getElementById("spoolModal").style.display = "flex";
+    document.getElementById("spoolModal").classList.add("open");
 
     try {
         const r = await fetch(`${API}/spools`);
@@ -404,7 +404,7 @@ async function openSpoolModal(jobId, filename, currentSpoolId) {
 
 function closeSpoolModal(event) {
     if (event && event.target !== document.getElementById("spoolModal")) return;
-    document.getElementById("spoolModal").style.display = "none";
+    document.getElementById("spoolModal").classList.remove("open");
     _modalJobId = null;
 }
 
@@ -419,7 +419,7 @@ async function saveSpoolAssignment() {
         });
         if (r.ok) {
             showToast("Spule aktualisiert", "success");
-            document.getElementById("spoolModal").style.display = "none";
+            document.getElementById("spoolModal").classList.remove("open");
             _modalJobId = null;
             loadJobs();
             loadDashboard();
