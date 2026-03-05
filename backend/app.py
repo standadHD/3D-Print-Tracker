@@ -46,15 +46,10 @@ async def process_job(job):
     t_cost = calculator.calc_total_cost(f_cost, e_cost)
     thumbs = metadata.get("thumbnails", [])
     thumb = thumbs[-1].get("relative_path", "") if thumbs else ""
-    # CFS-Slot Auto-Matching anhand spool_id
-    slot_label = None
-    if fi["spool_id"]:
-        spool_to_slot = await db.get_spool_id_to_slot()
-        slot_label = spool_to_slot.get(fi["spool_id"])
-    # spool_name mit Slot-Label anreichern
+    # Location aus Spoolman-Spool direkt lesen
     spool_name = fi["spool_name"]
-    if slot_label:
-        spool_name = f"{slot_label} – {spool_name}"
+    if spool and spool.get("location"):
+        spool_name = f"{spool['location']} – {spool_name}"
     return {
         "moonraker_job_id": job_id, "filename": filename, "status": status,
         "start_time": job.get("start_time"), "end_time": job.get("end_time"),
@@ -230,35 +225,63 @@ async def recalculate():
     await recalculate_all_costs()
     return {"message": "Neu berechnet"}
 
-# ── CFS Slot Konfiguration ───────────────────────────────────
+# ── Locations / CFS-Slots ───────────────────────────────────────
 @app.get("/api/cfs-slots")
 async def get_cfs_slots():
-    slots = await db.get_cfs_slots()
-    spools = await spoolman.get_all_spools()
-    spool_map = {}
-    for s in spools:
-        f = s.get("filament", {})
+    """Locations aus Spoolman laden + Spulen pro Location gruppieren"""
+    locations, spools_raw = await asyncio.gather(
+        spoolman.get_all_locations(),
+        spoolman.get_all_spools()
+    )
+
+    def spool_info(s):
+        f = s.get("filament", {}) or {}
         v = (f.get("vendor") or {}).get("name", "")
         name = f"{v} {f.get('name','')}".strip() or f"Spool #{s['id']}"
-        color = f.get("color_hex", "")
-        if color and not color.startswith("#"):
-            color = f"#{color}"
-        spool_map[s["id"]] = {"name": name, "color": color, "material": f.get("material", "")}
-    for slot in slots:
-        sid = slot["spool_id"]
-        slot["spool_info"] = spool_map.get(sid) if sid else None
-    return {"slots": slots, "spools": [{"id": s["id"], **spool_map[s["id"]]} for s in spools]}
+        color = f.get("color_hex", "") or ""
+        if color and not color.startswith("#"): color = f"#{color}"
+        remaining = s.get("remaining_weight")
+        return {
+            "id": s["id"],
+            "name": name,
+            "color": color or "#888",
+            "material": f.get("material", ""),
+            "remaining_weight": round(remaining, 0) if remaining is not None else None,
+            "location": s.get("location") or ""
+        }
+
+    all_spools = [spool_info(s) for s in spools_raw]
+
+    # Locations aus Spoolman als Slots aufbauen
+    loc_names = [loc["name"] for loc in locations] if locations else []
+    # Fallback falls keine Locations in Spoolman: eigene DB-Slots nutzen
+    if not loc_names:
+        db_slots = await db.get_cfs_slots()
+        loc_names = [sl["slot_label"] for sl in db_slots]
+
+    slots = []
+    for loc in loc_names:
+        spools_here = [sp for sp in all_spools if sp["location"] == loc]
+        slots.append({"slot_key": loc, "slot_label": loc, "spools": spools_here})
+
+    # Spulen ohne Location in "Lager (unbekannt)"
+    assigned = {sp["id"] for slot in slots for sp in slot["spools"]}
+    unassigned = [sp for sp in all_spools if sp["id"] not in assigned]
+    if unassigned:
+        slots.append({"slot_key": "__unassigned__", "slot_label": "Ohne Ort", "spools": unassigned})
+
+    return {"slots": slots, "spools": all_spools}
 
 @app.post("/api/cfs-slots")
 async def update_cfs_slots(payload: dict):
-    """Erwartet: {slots: [{slot_key, spool_id}, ...]}"""
+    """Fallback: manuelle Slot-Zuweisung in eigener DB (wenn keine Spoolman-Locations)"""
     for item in payload.get("slots", []):
         spool_id = item.get("spool_id")
         await db.update_cfs_slot(
             item["slot_key"],
             int(spool_id) if spool_id else None
         )
-    return {"message": "CFS-Slots gespeichert"}
+    return {"message": "Slots gespeichert"}
 # ─────────────────────────────────────────────────────────────
 
 @app.get("/api/debug/printer-objects")

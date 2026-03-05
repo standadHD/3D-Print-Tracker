@@ -22,6 +22,20 @@ class SpoolmanClient:
             logger.error(f"Spoolman Fehler: {e}")
             return []
 
+    async def get_all_locations(self):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.base_url}/api/v1/location",
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+                    return []
+        except Exception as e:
+            logger.error(f"Spoolman Locations Fehler: {e}")
+            return []
+
     async def get_spool_by_id(self, spool_id):
         try:
             async with aiohttp.ClientSession() as session:

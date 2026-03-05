@@ -370,7 +370,7 @@ async function saveSettings() {
     }
 }
 
-// ── CFS Slots ──────────────────────────────────────────────────
+// ── CFS / Locations ───────────────────────────────────────────
 let _cfsData = { slots: [], spools: [] };
 
 async function loadCfsSlots() {
@@ -383,65 +383,36 @@ async function loadCfsSlots() {
     }
 }
 
+function spoolLabel(s) {
+    const mat = s.material ? ` [${s.material}]` : "";
+    const rem = s.remaining_weight != null ? ` – ${s.remaining_weight}g` : "";
+    return `${s.name}${mat}${rem}`;
+}
+
 function renderCfsSlots() {
     const container = document.getElementById("cfsSlotsList");
-    const spoolOptions = `<option value="">-- keine --</option>` +
-        _cfsData.spools.map(s => {
-            const mat = s.material ? ` [${s.material}]` : "";
-            return `<option value="${s.id}">${s.name}${mat}</option>`;
-        }).join("");
-
+    if (!_cfsData.slots.length) {
+        container.innerHTML = '<p class="text-muted">Keine Orte in Spoolman gefunden. Bitte Orte in Spoolman anlegen und Spulen zuordnen.</p>';
+        return;
+    }
     container.innerHTML = _cfsData.slots.map(slot => {
-        const info = slot.spool_info;
-        const color = info?.color || "#666";
-        const colorDot = info ? `<span class="spool-color" style="background:${color}"></span>` : "";
+        const spoolsHtml = slot.spools.length
+            ? slot.spools.map(s => `
+                <div class="cfs-spool-item">
+                    <span class="spool-color" style="background:${s.color}"></span>
+                    <span>${spoolLabel(s)}</span>
+                </div>`).join("")
+            : '<span class="text-muted" style="font-size:.8rem">Keine Spulen</span>';
         return `
             <div class="cfs-slot-row">
-                <span class="cfs-slot-label">
+                <div class="cfs-slot-header">
                     <i class="fas fa-box-open" style="color:var(--accent)"></i>
-                    ${slot.slot_label}
-                </span>
-                <div class="cfs-slot-select-wrap">
-                    ${colorDot}
-                    <select class="modal-select cfs-slot-select" data-slot-key="${slot.slot_key}" onchange="updateCfsSlotColor(this)">
-                        ${spoolOptions.replace(`value="${slot.spool_id}"`, `value="${slot.spool_id}" selected`)}
-                    </select>
+                    <span class="cfs-slot-label">${slot.slot_label}</span>
+                    <span class="cfs-slot-count">${slot.spools.length} Spule${slot.spools.length !== 1 ? 'n' : ''}</span>
                 </div>
+                <div class="cfs-spool-list">${spoolsHtml}</div>
             </div>`;
     }).join("");
-}
-
-function updateCfsSlotColor(select) {
-    const sid = parseInt(select.value);
-    const spool = _cfsData.spools.find(s => s.id === sid);
-    const dot = select.previousElementSibling;
-    if (dot && dot.classList.contains("spool-color")) {
-        dot.style.background = spool?.color || "#666";
-        dot.style.display = spool ? "inline-block" : "none";
-    }
-}
-
-async function saveCfsSlots() {
-    const selects = document.querySelectorAll(".cfs-slot-select");
-    const slots = Array.from(selects).map(s => ({
-        slot_key: s.dataset.slotKey,
-        spool_id: s.value ? parseInt(s.value) : null
-    }));
-    try {
-        const r = await fetch(`${API}/cfs-slots`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slots })
-        });
-        if (r.ok) {
-            showToast("CFS-Slots gespeichert", "success");
-            await loadCfsSlots();
-        } else {
-            showToast("Fehler beim Speichern", "error");
-        }
-    } catch(e) {
-        showToast("Fehler beim Speichern", "error");
-    }
 }
 // ────────────────────────────────────────────────────────────
 
@@ -468,26 +439,24 @@ async function openSpoolModal(jobId, filename, currentSpoolId) {
         _cfsData = await cfsR.json();
         _allSpools = await spoolsR.json();
 
-        // Slot-Dropdown befüllen
-        slotSel.innerHTML = '<option value="">-- kein Slot --</option>' +
-            _cfsData.slots.map(slot => {
-                const info = slot.spool_info;
-                const spoolName = info ? ` (${info.name})` : " (leer)";
-                // Slot vorauswählen wenn spool_id übereinstimmt
-                const sel = slot.spool_id == currentSpoolId ? " selected" : "";
-                return `<option value="${slot.slot_key}"${sel}>${slot.slot_label}${spoolName}</option>`;
-            }).join("");
+        // Slot-Dropdown: Locations aus Spoolman
+        slotSel.innerHTML = '<option value="">-- kein Ort --</option>' +
+            _cfsData.slots
+                .filter(slot => slot.slot_key !== "__unassigned__")
+                .map(slot => {
+                    // Slot vorauswählen wenn eine der Spulen des Slots der currentSpoolId entspricht
+                    const hasCurrentSpool = slot.spools.some(s => s.id == currentSpoolId);
+                    const sel = hasCurrentSpool ? " selected" : "";
+                    const count = slot.spools.length;
+                    return `<option value="${slot.slot_key}"${sel}>${slot.slot_label} (${count} Spule${count!==1?'n':''})</option>`;
+                }).join("");
 
-        // Spulen-Dropdown befüllen
-        spoolSel.innerHTML = '<option value="">-- aus Slot übernehmen --</option>' +
-            _allSpools.map(s => {
-                const f = s.filament || {};
-                const v = (f.vendor || {}).name || "";
-                const name = `${v} ${f.name||""}`.trim() || `Spool #${s.id}`;
-                const mat = f.material ? ` [${f.material}]` : "";
-                const rem = s.remaining_weight != null ? ` – ${s.remaining_weight.toFixed(0)}g` : "";
+        // Spulen-Dropdown: alle Spulen mit remaining_weight
+        spoolSel.innerHTML = '<option value="">-- direkt auswählen --</option>' +
+            _cfsData.spools.map(s => {
                 const sel = s.id == currentSpoolId ? " selected" : "";
-                return `<option value="${s.id}"${sel}>${name}${mat}${rem}</option>`;
+                const loc = s.location ? ` @ ${s.location}` : "";
+                return `<option value="${s.id}"${sel}>${spoolLabel(s)}${loc}</option>`;
             }).join("");
     } catch(e) {
         slotSel.innerHTML = '<option value="">Fehler</option>';
@@ -511,11 +480,11 @@ async function saveSpoolAssignment() {
     const slotKey = document.getElementById("modalSlotSelect").value;
     const spoolId = document.getElementById("modalSpoolSelect").value;
 
-    // Spule ermitteln: direkte Auswahl hat Vorrang, sonst aus Slot
+    // Spule ermitteln: direkte Auswahl hat Vorrang, sonst erste Spule des Slots
     let resolvedSpoolId = spoolId ? parseInt(spoolId) : null;
     if (!resolvedSpoolId && slotKey) {
         const slot = _cfsData.slots.find(s => s.slot_key === slotKey);
-        resolvedSpoolId = slot?.spool_id || null;
+        resolvedSpoolId = slot?.spools?.[0]?.id || null;
     }
 
     try {
