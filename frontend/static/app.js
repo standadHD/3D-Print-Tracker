@@ -261,7 +261,7 @@ async function loadSpools() {
             const remaining = s.remaining_weight || 0;
             const total = filament.weight || 1000;
             const pct = Math.min(100, Math.max(0, (remaining / total) * 100));
-            const price = filament.price || 0;
+            const price = s.price || filament.price || 0;
             const weight = filament.weight || 0;
 
             return `

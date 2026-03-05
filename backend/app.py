@@ -182,22 +182,9 @@ async def get_statistics():
 
 @app.get("/api/spools")
 async def get_spools():
+    """Spoolman Rohdaten durchreichen - Frontend erwartet Original-Format"""
     spools = await spoolman.get_all_spools()
-    result = []
-    for spool in spools:
-        info = await spoolman.get_filament_info(spool)
-        rem = spool.get("remaining_weight")
-        used = spool.get("used_weight", 0)
-        fil = spool.get("filament", {})
-        tw = fil.get("weight", 1000) or 1000
-        result.append({
-            "id": spool.get("id"), "name": info["spool_name"],
-            "filament_type": info["filament_type"], "color": info["filament_color"],
-            "cost_per_kg": info["cost_per_kg"], "remaining_weight": rem,
-            "used_weight": round(used, 1) if used else 0, "total_weight": tw,
-            "percent_remaining": round(rem / tw * 100, 1) if rem and tw else None,
-            "is_active": spool.get("is_active", False)})
-    return result
+    return spools
 
 @app.get("/api/settings")
 async def get_settings():
