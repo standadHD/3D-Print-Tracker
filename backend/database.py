@@ -10,6 +10,7 @@ class Database:
 
     async def initialize(self):
         async with aiosqlite.connect(self.db_path) as db:
+            # ── Legacy CFS-Slots ───────────────────────────────────────────────
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS cfs_slots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,18 +20,59 @@ class Database:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # Default-Slots anlegen
             default_slots = [
-                ("CFS1A", "CFS 1A"),
-                ("CFS1B", "CFS 1B"),
-                ("CFS1C", "CFS 1C"),
-                ("CFS1D", "CFS 1D"),
-                ("LAGER", "Lager"),
+                ("CFS1A", "CFS 1A"), ("CFS1B", "CFS 1B"),
+                ("CFS1C", "CFS 1C"), ("CFS1D", "CFS 1D"), ("LAGER", "Lager"),
             ]
             for key, label in default_slots:
                 await db.execute(
                     "INSERT OR IGNORE INTO cfs_slots (slot_key, slot_label, spool_id) VALUES (?,?,NULL)",
                     (key, label))
+
+            # ── Eigene Spulenverwaltung ────────────────────────────────────────
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS filament_vendors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    website TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS filaments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vendor_id INTEGER REFERENCES filament_vendors(id) ON DELETE SET NULL,
+                    name TEXT NOT NULL,
+                    material TEXT NOT NULL,
+                    color_name TEXT,
+                    color_hex TEXT,
+                    diameter REAL DEFAULT 1.75,
+                    density REAL DEFAULT 1.24,
+                    weight_per_spool REAL DEFAULT 1000,
+                    price_per_spool REAL DEFAULT 0,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS spools (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filament_id INTEGER REFERENCES filaments(id) ON DELETE SET NULL,
+                    label TEXT,
+                    location TEXT,
+                    initial_weight REAL DEFAULT 1000,
+                    remaining_weight REAL DEFAULT 1000,
+                    is_active INTEGER DEFAULT 0,
+                    is_empty INTEGER DEFAULT 0,
+                    purchase_date TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # ── Print Jobs ────────────────────────────────────────────────────
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS print_jobs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,6 +132,7 @@ class Database:
             await db.commit()
             logger.info("Datenbank initialisiert")
 
+    # ── Settings ──────────────────────────────────────────────────────────────
     async def get_setting(self, key):
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute("SELECT value FROM cost_settings WHERE key = ?", (key,))
@@ -110,47 +153,16 @@ class Database:
             rows = await cursor.fetchall()
             return {row["key"]: {"value": row["value"], "description": row["description"]} for row in rows}
 
-    async def job_exists(self, moonraker_job_id):
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(
-                "SELECT id FROM print_jobs WHERE moonraker_job_id = ?", (moonraker_job_id,))
-            return await cursor.fetchone() is not None
-
-    async def insert_job(self, job_data):
-        """Neuen Job einfügen oder existierenden komplett ersetzen (inkl. Spule)."""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                INSERT OR REPLACE INTO print_jobs (
-                    moonraker_job_id, filename, status, start_time, end_time,
-                    print_duration, total_duration, filament_used_mm, filament_used_g,
-                    spool_id, spool_name, filament_type, filament_color,
-                    filament_cost_per_kg, filament_cost, electricity_cost, total_cost,
-                    metadata_thumbnail, metadata_slicer, metadata_layer_height,
-                    metadata_object_height, metadata_estimated_time, updated_at
-                ) VALUES (
-                    :moonraker_job_id, :filename, :status, :start_time, :end_time,
-                    :print_duration, :total_duration, :filament_used_mm, :filament_used_g,
-                    :spool_id, :spool_name, :filament_type, :filament_color,
-                    :filament_cost_per_kg, :filament_cost, :electricity_cost, :total_cost,
-                    :metadata_thumbnail, :metadata_slicer, :metadata_layer_height,
-                    :metadata_object_height, :metadata_estimated_time, CURRENT_TIMESTAMP
-                )""", job_data)
-            await db.commit()
-
+    # ── Print Jobs ────────────────────────────────────────────────────────────
     async def sync_job(self, job_data):
-        """Job beim Sync einfügen. Bei existierenden Jobs wird die manuelle Spulenzuordnung beibehalten."""
         async with aiosqlite.connect(self.db_path) as db:
-            # Prüfen ob Job bereits existiert
             cursor = await db.execute(
                 "SELECT spool_id, spool_name, filament_type, filament_color, filament_cost_per_kg, filament_used_g FROM print_jobs WHERE moonraker_job_id = ?",
                 (job_data["moonraker_job_id"],)
             )
             existing = await cursor.fetchone()
             if existing:
-                # Job existiert bereits — nur Status/Metadaten aktualisieren
-                # Spule, Filamentgewicht und Kosten beibehalten (koennen manuell gesetzt sein)
-                existing_filament_g = existing[5]  # filament_used_g aus SELECT
-                # Nur ueberschreiben wenn bisher 0 und jetzt ein Wert vorhanden
+                existing_filament_g = existing[5]
                 filament_g_to_use = job_data["filament_used_g"] \
                     if (not existing_filament_g or existing_filament_g <= 0) \
                     else existing_filament_g
@@ -166,14 +178,11 @@ class Database:
                         updated_at=CURRENT_TIMESTAMP
                     WHERE moonraker_job_id=:moonraker_job_id
                 """, job_data)
-                # Filamentgewicht nur aktualisieren wenn es bisher 0 war
                 if filament_g_to_use != existing_filament_g:
                     await db.execute(
                         "UPDATE print_jobs SET filament_used_g=? WHERE moonraker_job_id=?",
                         (filament_g_to_use, job_data["moonraker_job_id"]))
-                    logger.debug(f"Filament fuer {job_data['moonraker_job_id']} von {existing_filament_g}g auf {filament_g_to_use}g aktualisiert")
             else:
-                # Neuer Job — komplett einfügen
                 await db.execute("""
                     INSERT INTO print_jobs (
                         moonraker_job_id, filename, status, start_time, end_time,
@@ -207,7 +216,7 @@ class Database:
             where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
             count_cursor = await db.execute(f"SELECT COUNT(*) FROM print_jobs {where}", params)
             total = (await count_cursor.fetchone())[0]
-            allowed = ["end_time","start_time","total_cost","filename","filament_used_g","print_duration"]
+            allowed = ["end_time", "start_time", "total_cost", "filename", "filament_used_g", "print_duration"]
             if sort_by not in allowed:
                 sort_by = "end_time"
             order = "DESC" if sort_order.lower() == "desc" else "ASC"
@@ -216,6 +225,13 @@ class Database:
                 params + [limit, offset])
             rows = await cursor.fetchall()
             return [dict(row) for row in rows], total
+
+    async def get_job_by_id(self, job_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM print_jobs WHERE id = ?", (job_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
     async def get_all_moonraker_job_ids(self):
         async with aiosqlite.connect(self.db_path) as db:
@@ -230,12 +246,32 @@ class Database:
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
 
-    async def get_job_by_id(self, job_id):
+    async def update_job_filament(self, job_id, filament_g, filament_cost, electricity_cost, total_cost):
         async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute("SELECT * FROM print_jobs WHERE id = ?", (job_id,))
-            row = await cursor.fetchone()
-            return dict(row) if row else None
+            await db.execute("""
+                UPDATE print_jobs SET
+                    filament_used_g=?, filament_cost=?, electricity_cost=?, total_cost=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (filament_g, filament_cost, electricity_cost, total_cost, job_id))
+            await db.commit()
+
+    async def update_job_spool(self, job_id, spool_id, spool_name, filament_type, filament_color, cost_per_kg, filament_cost, electricity_cost, total_cost):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE print_jobs SET
+                    spool_id=?, spool_name=?, filament_type=?, filament_color=?,
+                    filament_cost_per_kg=?, filament_cost=?, electricity_cost=?, total_cost=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (spool_id, spool_name, filament_type, filament_color,
+                  cost_per_kg, filament_cost, electricity_cost, total_cost, job_id))
+            await db.commit()
+
+    async def delete_job(self, job_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM print_jobs WHERE id = ?", (job_id,))
+            await db.commit()
 
     async def get_statistics(self):
         async with aiosqlite.connect(self.db_path) as db:
@@ -273,28 +309,21 @@ class Database:
             stats["by_month"] = [dict(r) for r in await c3.fetchall()]
             return stats
 
-    async def update_job_filament(self, job_id, filament_g, filament_cost, electricity_cost, total_cost):
+    async def log_sync(self, jobs_imported, jobs_updated, errors=None):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                UPDATE print_jobs SET
-                    filament_used_g=?, filament_cost=?, electricity_cost=?, total_cost=?,
-                    updated_at=CURRENT_TIMESTAMP
-                WHERE id=?
-            """, (filament_g, filament_cost, electricity_cost, total_cost, job_id))
+            await db.execute(
+                "INSERT INTO sync_log (jobs_imported, jobs_updated, errors) VALUES (?,?,?)",
+                (jobs_imported, jobs_updated, errors))
             await db.commit()
 
-    async def update_job_spool(self, job_id, spool_id, spool_name, filament_type, filament_color, cost_per_kg, filament_cost, electricity_cost, total_cost):
+    async def get_last_sync(self):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                UPDATE print_jobs SET
-                    spool_id=?, spool_name=?, filament_type=?, filament_color=?,
-                    filament_cost_per_kg=?, filament_cost=?, electricity_cost=?, total_cost=?,
-                    updated_at=CURRENT_TIMESTAMP
-                WHERE id=?
-            """, (spool_id, spool_name, filament_type, filament_color,
-                   cost_per_kg, filament_cost, electricity_cost, total_cost, job_id))
-            await db.commit()
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM sync_log ORDER BY sync_time DESC LIMIT 1")
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
+    # ── CFS-Slots (Legacy) ────────────────────────────────────────────────────
     async def get_cfs_slots(self):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -310,7 +339,6 @@ class Database:
             await db.commit()
 
     async def get_spool_id_to_slot(self):
-        """Gibt ein Dict {spool_id: slot_label} zurueck fuer Auto-Matching beim Sync"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
@@ -318,21 +346,199 @@ class Database:
             rows = await cursor.fetchall()
             return {row["spool_id"]: row["slot_label"] for row in rows}
 
-    async def delete_job(self, job_id):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM print_jobs WHERE id = ?", (job_id,))
-            await db.commit()
-
-    async def log_sync(self, jobs_imported, jobs_updated, errors=None):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT INTO sync_log (jobs_imported, jobs_updated, errors) VALUES (?,?,?)",
-                (jobs_imported, jobs_updated, errors))
-            await db.commit()
-
-    async def get_last_sync(self):
+    # ── Eigene Spulenverwaltung: Vendors ──────────────────────────────────────
+    async def get_all_vendors(self):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute("SELECT * FROM sync_log ORDER BY sync_time DESC LIMIT 1")
+            cursor = await db.execute("SELECT * FROM filament_vendors ORDER BY name")
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_vendor_by_id(self, vendor_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM filament_vendors WHERE id = ?", (vendor_id,))
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+    async def create_vendor(self, name, website=None, notes=None):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "INSERT INTO filament_vendors (name, website, notes) VALUES (?, ?, ?)",
+                (name, website, notes))
+            await db.commit()
+            return cursor.lastrowid
+
+    async def update_vendor(self, vendor_id, name, website=None, notes=None):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE filament_vendors SET name=?, website=?, notes=? WHERE id=?",
+                (name, website, notes, vendor_id))
+            await db.commit()
+
+    async def delete_vendor(self, vendor_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM filament_vendors WHERE id = ?", (vendor_id,))
+            await db.commit()
+
+    # ── Eigene Spulenverwaltung: Filaments ────────────────────────────────────
+    async def get_all_filaments(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT f.*, v.name as vendor_name
+                FROM filaments f
+                LEFT JOIN filament_vendors v ON f.vendor_id = v.id
+                ORDER BY v.name, f.material, f.name
+            """)
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_filament_by_id(self, filament_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT f.*, v.name as vendor_name
+                FROM filaments f
+                LEFT JOIN filament_vendors v ON f.vendor_id = v.id
+                WHERE f.id = ?
+            """, (filament_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def create_filament(self, data: dict):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                INSERT INTO filaments
+                    (vendor_id, name, material, color_name, color_hex, diameter, density,
+                     weight_per_spool, price_per_spool, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data.get("vendor_id"), data["name"], data["material"],
+                data.get("color_name"), data.get("color_hex"),
+                data.get("diameter", 1.75), data.get("density", 1.24),
+                data.get("weight_per_spool", 1000), data.get("price_per_spool", 0),
+                data.get("notes")
+            ))
+            await db.commit()
+            return cursor.lastrowid
+
+    async def update_filament(self, filament_id, data: dict):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE filaments SET
+                    vendor_id=?, name=?, material=?, color_name=?, color_hex=?,
+                    diameter=?, density=?, weight_per_spool=?, price_per_spool=?, notes=?
+                WHERE id=?
+            """, (
+                data.get("vendor_id"), data["name"], data["material"],
+                data.get("color_name"), data.get("color_hex"),
+                data.get("diameter", 1.75), data.get("density", 1.24),
+                data.get("weight_per_spool", 1000), data.get("price_per_spool", 0),
+                data.get("notes"), filament_id
+            ))
+            await db.commit()
+
+    async def delete_filament(self, filament_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM filaments WHERE id = ?", (filament_id,))
+            await db.commit()
+
+    # ── Eigene Spulenverwaltung: Spools ───────────────────────────────────────
+    async def get_all_local_spools(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT s.*,
+                    f.name as filament_name, f.material, f.color_hex, f.color_name,
+                    f.diameter, f.density, f.weight_per_spool, f.price_per_spool,
+                    v.name as vendor_name
+                FROM spools s
+                LEFT JOIN filaments f ON s.filament_id = f.id
+                LEFT JOIN filament_vendors v ON f.vendor_id = v.id
+                ORDER BY s.is_active DESC, s.location, s.id
+            """)
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_local_spool_by_id(self, spool_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT s.*,
+                    f.name as filament_name, f.material, f.color_hex, f.color_name,
+                    f.diameter, f.density, f.weight_per_spool, f.price_per_spool,
+                    v.name as vendor_name
+                FROM spools s
+                LEFT JOIN filaments f ON s.filament_id = f.id
+                LEFT JOIN filament_vendors v ON f.vendor_id = v.id
+                WHERE s.id = ?
+            """, (spool_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def create_local_spool(self, data: dict):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                INSERT INTO spools
+                    (filament_id, label, location, initial_weight, remaining_weight,
+                     is_active, is_empty, purchase_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data.get("filament_id"),
+                data.get("label"),
+                data.get("location"),
+                data.get("initial_weight", 1000),
+                data.get("remaining_weight", data.get("initial_weight", 1000)),
+                1 if data.get("is_active") else 0,
+                0,
+                data.get("purchase_date"),
+                data.get("notes")
+            ))
+            await db.commit()
+            return cursor.lastrowid
+
+    async def update_local_spool(self, spool_id, data: dict):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE spools SET
+                    filament_id=?, label=?, location=?, initial_weight=?, remaining_weight=?,
+                    is_active=?, is_empty=?, purchase_date=?, notes=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (
+                data.get("filament_id"),
+                data.get("label"),
+                data.get("location"),
+                data.get("initial_weight", 1000),
+                data.get("remaining_weight", 1000),
+                1 if data.get("is_active") else 0,
+                1 if data.get("is_empty") else 0,
+                data.get("purchase_date"),
+                data.get("notes"),
+                spool_id
+            ))
+            await db.commit()
+
+    async def delete_local_spool(self, spool_id):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM spools WHERE id = ?", (spool_id,))
+            await db.commit()
+
+    async def deduct_filament_from_spool(self, spool_id, used_g):
+        """Verbrauch vom verbleibenden Gewicht abziehen (min. 0)."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE spools SET
+                    remaining_weight = MAX(0, remaining_weight - ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (used_g, spool_id))
+            await db.commit()
+
+    async def get_local_spool_locations(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                "SELECT DISTINCT location FROM spools WHERE location IS NOT NULL AND location != '' ORDER BY location")
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]

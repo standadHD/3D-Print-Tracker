@@ -26,17 +26,21 @@
             </button>
         </div>
     </header>
+
     <nav class="tabs">
         <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
             <i class="fas fa-chart-pie"></i> Dashboard</button>
         <button class="tab" data-tab="jobs" onclick="switchTab('jobs')">
             <i class="fas fa-list"></i> Druckauftraege</button>
+        <button class="tab" data-tab="spoolmgmt" onclick="switchTab('spoolmgmt')">
+            <i class="fas fa-boxes"></i> Spulenverwaltung</button>
         <button class="tab" data-tab="spools" onclick="switchTab('spools')">
-            <i class="fas fa-circle-notch"></i> Spulen</button>
+            <i class="fas fa-circle-notch"></i> Spulen (Spoolman)</button>
         <button class="tab" data-tab="settings" onclick="switchTab('settings')">
             <i class="fas fa-cog"></i> Einstellungen</button>
     </nav>
 
+    <!-- Dashboard -->
     <div class="tab-content active" id="tab-dashboard">
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-icon"><i class="fas fa-euro-sign"></i></div>
@@ -75,6 +79,7 @@
         </div>
     </div>
 
+    <!-- Jobs -->
     <div class="tab-content" id="tab-jobs">
         <div class="toolbar">
             <div class="toolbar-right"><span id="jobCount" class="job-count"></span></div>
@@ -104,16 +109,56 @@
                 <th class="th-sortable" onclick="setSortBy('total_cost')">Gesamt <span id="sort-total_cost" class="sort-icon"></span></th>
                 <th></th>
             </tr></thead>
-            <tbody id="jobsTableBody"><tr><td colspan="10" class="text-center text-muted">Lade...</td></tr></tbody>
+            <tbody id="jobsTableBody"><tr><td colspan="11" class="text-center text-muted">Lade...</td></tr></tbody>
             </table>
         </div>
         <div class="pagination" id="pagination"></div>
     </div>
 
+    <!-- Spulenverwaltung (eigen) -->
+    <div class="tab-content" id="tab-spoolmgmt">
+        <div class="spoolmgmt-layout">
+            <!-- Hersteller -->
+            <div class="card spoolmgmt-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-industry"></i> Hersteller</h3>
+                    <button class="btn btn-primary btn-small" onclick="openVendorModal()">
+                        <i class="fas fa-plus"></i> Neu
+                    </button>
+                </div>
+                <div id="vendorsList" class="mgmt-list"><p class="text-muted">Lade...</p></div>
+            </div>
+
+            <!-- Filamente -->
+            <div class="card spoolmgmt-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-layer-group"></i> Filamente</h3>
+                    <button class="btn btn-primary btn-small" onclick="openFilamentModal()">
+                        <i class="fas fa-plus"></i> Neu
+                    </button>
+                </div>
+                <div id="filamentsList" class="mgmt-list"><p class="text-muted">Lade...</p></div>
+            </div>
+
+            <!-- Spulen -->
+            <div class="card spoolmgmt-section full-width-section">
+                <div class="section-header">
+                    <h3><i class="fas fa-circle-notch"></i> Spulen</h3>
+                    <button class="btn btn-primary btn-small" onclick="openLocalSpoolModal()">
+                        <i class="fas fa-plus"></i> Neue Spule
+                    </button>
+                </div>
+                <div id="localSpoolsGrid" class="spools-grid"><p class="text-muted">Lade...</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spulen Spoolman -->
     <div class="tab-content" id="tab-spools">
         <div class="spools-grid" id="spoolsGrid"><p class="text-muted">Lade Spulen...</p></div>
     </div>
 
+    <!-- Einstellungen -->
     <div class="tab-content" id="tab-settings">
         <div class="card settings-card">
             <h3><i class="fas fa-sliders-h"></i> Kosteneinstellungen</h3>
@@ -134,9 +179,8 @@
         </div>
         <div class="card settings-card">
             <h3><i class="fas fa-boxes"></i> CFS / Lager Spulenzuordnung</h3>
-            <p class="settings-hint">Weise jedem Slot die aktuell eingelegte Spoolman-Spule zu. Neue Druckaufträge werden automatisch dem richtigen Slot zugeordnet.</p>
+            <p class="settings-hint">Weise jedem Slot die aktuell eingelegte Spoolman-Spule zu.</p>
             <div id="cfsSlotsList" class="cfs-slots-list"><p class="text-muted">Lade...</p></div>
-            <p class="settings-hint" style="margin-top:12px"><i class="fas fa-info-circle"></i> Orte und Zuordnungen werden direkt in Spoolman verwaltet. Hier nur zur Übersicht.</p>
         </div>
         <div class="card settings-card">
             <h3><i class="fas fa-info-circle"></i> Verbindungsstatus</h3>
@@ -144,7 +188,8 @@
         </div>
     </div>
 </div>
-<!-- Spool Edit Modal -->
+
+<!-- Spool Edit Modal (Druckjob) -->
 <dialog id="spoolModal">
     <div class="modal-box">
         <div class="modal-header">
@@ -154,12 +199,31 @@
         <div class="modal-body">
             <p class="modal-job-name" id="modalJobName"></p>
             <div class="form-group">
-                <label>Slot / Lager</label>
-                <select id="modalSlotSelect" class="modal-select" onchange="onModalSlotChange()"></select>
+                <label>Spulenquelle</label>
+                <div class="spool-source-toggle">
+                    <button class="source-btn active" id="srcBtnLocal" onclick="setSpoolSource('local')">
+                        <i class="fas fa-database"></i> Eigene Verwaltung
+                    </button>
+                    <button class="source-btn" id="srcBtnSpoolman" onclick="setSpoolSource('spoolman')">
+                        <i class="fas fa-cloud"></i> Spoolman
+                    </button>
+                </div>
             </div>
-            <div class="form-group" id="modalSpoolGroup">
-                <label>Spule (optional überschreiben)</label>
-                <select id="modalSpoolSelect" class="modal-select"></select>
+            <!-- Lokale Spulen -->
+            <div id="localSpoolGroup" class="form-group">
+                <label>Spule (eigene Verwaltung)</label>
+                <select id="modalLocalSpoolSelect" class="modal-select"></select>
+            </div>
+            <!-- Spoolman Slot -->
+            <div id="spoolmanGroup" class="form-group" style="display:none">
+                <div class="form-group">
+                    <label>Slot / Lager</label>
+                    <select id="modalSlotSelect" class="modal-select" onchange="onModalSlotChange()"></select>
+                </div>
+                <div class="form-group" id="modalSpoolGroup">
+                    <label>Spule (optional überschreiben)</label>
+                    <select id="modalSpoolSelect" class="modal-select"></select>
+                </div>
             </div>
             <div class="modal-divider"></div>
             <div class="form-group">
@@ -173,6 +237,119 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeSpoolModal()">Abbrechen</button>
             <button class="btn btn-primary" onclick="saveSpoolAssignment()"><i class="fas fa-save"></i> Speichern</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Vendor Modal -->
+<dialog id="vendorModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 id="vendorModalTitle"><i class="fas fa-industry"></i> Hersteller</h3>
+            <button class="modal-close" onclick="closeVendorModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="vendorId">
+            <div class="form-group"><label>Name *</label>
+                <input type="text" id="vendorName" class="modal-input" placeholder="z.B. Bambu Lab"></div>
+            <div class="form-group"><label>Website</label>
+                <input type="text" id="vendorWebsite" class="modal-input" placeholder="https://..."></div>
+            <div class="form-group"><label>Notizen</label>
+                <input type="text" id="vendorNotes" class="modal-input" placeholder="Optional"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeVendorModal()">Abbrechen</button>
+            <button class="btn btn-primary" onclick="saveVendor()"><i class="fas fa-save"></i> Speichern</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Filament Modal -->
+<dialog id="filamentModal">
+    <div class="modal-box modal-box-wide">
+        <div class="modal-header">
+            <h3 id="filamentModalTitle"><i class="fas fa-layer-group"></i> Filament</h3>
+            <button class="modal-close" onclick="closeFilamentModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="filamentId">
+            <div class="modal-grid">
+                <div class="form-group"><label>Name *</label>
+                    <input type="text" id="filamentName" class="modal-input" placeholder="z.B. PLA Basic Grau"></div>
+                <div class="form-group"><label>Hersteller</label>
+                    <select id="filamentVendor" class="modal-select"></select></div>
+                <div class="form-group"><label>Material *</label>
+                    <input type="text" id="filamentMaterial" class="modal-input" list="materialList" placeholder="z.B. PLA">
+                    <datalist id="materialList">
+                        <option value="PLA"><option value="PETG"><option value="ABS">
+                        <option value="TPU"><option value="ASA"><option value="PA"><option value="PC">
+                    </datalist></div>
+                <div class="form-group"><label>Farbe Name</label>
+                    <input type="text" id="filamentColorName" class="modal-input" placeholder="z.B. Bambu Green"></div>
+                <div class="form-group"><label>Farbe (Hex)</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="color" id="filamentColorPicker" style="width:44px;height:38px;border:none;background:none;cursor:pointer;padding:0">
+                        <input type="text" id="filamentColorHex" class="modal-input" placeholder="#00FF00" style="flex:1">
+                    </div></div>
+                <div class="form-group"><label>Durchmesser (mm)</label>
+                    <input type="number" id="filamentDiameter" class="modal-input" step="0.01" value="1.75"></div>
+                <div class="form-group"><label>Dichte (g/cm³)</label>
+                    <input type="number" id="filamentDensity" class="modal-input" step="0.01" value="1.24"></div>
+                <div class="form-group"><label>Gewicht/Spule (g)</label>
+                    <input type="number" id="filamentWeight" class="modal-input" step="1" value="1000"></div>
+                <div class="form-group"><label>Preis/Spule (EUR)</label>
+                    <input type="number" id="filamentPrice" class="modal-input" step="0.01" value="0"></div>
+                <div class="form-group" style="grid-column:1/-1"><label>Notizen</label>
+                    <input type="text" id="filamentNotes" class="modal-input" placeholder="Optional"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeFilamentModal()">Abbrechen</button>
+            <button class="btn btn-primary" onclick="saveFilament()"><i class="fas fa-save"></i> Speichern</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Local Spool Modal -->
+<dialog id="localSpoolModal">
+    <div class="modal-box modal-box-wide">
+        <div class="modal-header">
+            <h3 id="localSpoolModalTitle"><i class="fas fa-circle-notch"></i> Spule</h3>
+            <button class="modal-close" onclick="closeLocalSpoolModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="localSpoolId">
+            <div class="modal-grid">
+                <div class="form-group"><label>Filament *</label>
+                    <select id="localSpoolFilament" class="modal-select"></select></div>
+                <div class="form-group"><label>Bezeichnung / Label</label>
+                    <input type="text" id="localSpoolLabel" class="modal-input" placeholder="z.B. Spule #3 Grün"></div>
+                <div class="form-group"><label>Lagerort</label>
+                    <input type="text" id="localSpoolLocation" class="modal-input" list="locationList" placeholder="z.B. CFS Slot 1">
+                    <datalist id="locationList"></datalist></div>
+                <div class="form-group"><label>Anfangsgewicht (g)</label>
+                    <input type="number" id="localSpoolInitial" class="modal-input" step="1" value="1000"></div>
+                <div class="form-group"><label>Verbleibendes Gewicht (g)</label>
+                    <input type="number" id="localSpoolRemaining" class="modal-input" step="1" value="1000"></div>
+                <div class="form-group"><label>Kaufdatum</label>
+                    <input type="date" id="localSpoolDate" class="modal-input"></div>
+                <div class="form-group"><label>Aktiv</label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="localSpoolActive">
+                        <span class="toggle-text">Als aktive Spule markieren</span>
+                    </label></div>
+                <div class="form-group"><label>Leer</label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="localSpoolEmpty">
+                        <span class="toggle-text">Spule ist aufgebraucht</span>
+                    </label></div>
+                <div class="form-group" style="grid-column:1/-1"><label>Notizen</label>
+                    <input type="text" id="localSpoolNotes" class="modal-input" placeholder="Optional"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeLocalSpoolModal()">Abbrechen</button>
+            <button class="btn btn-primary" onclick="saveLocalSpool()"><i class="fas fa-save"></i> Speichern</button>
         </div>
     </div>
 </dialog>
